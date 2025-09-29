@@ -1,0 +1,347 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Motor Keyboard (WebSerial) - GitHub Pages Template</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --root-bg:#0b0e10; --text:#f5f6f7;
+      --kbd-border:#111315; --kbd-bg:#0f1416;
+      --key-zero:#232628; --key-selected:#1309AA; --key-highlight:#ff8c42;
+      --val-color:#5e76ff;
+    }
+    body{background:var(--root-bg); color:var(--text); font-family: "Helvetica", Arial, sans-serif; margin:16px;}
+    h1 {font-size:1.2rem; margin-bottom:8px;}
+    .topbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+    select,input[type="text"]{background:#111316;color:var(--text);border:1px solid #222;padding:6px;border-radius:4px;}
+    button{background:#2c3e50;color:#fff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer;}
+    button.primary{background:#16a085;}
+    button.danger{background:#c0392b;}
+    button:disabled{opacity:0.5;cursor:not-allowed;}
+    /* keyboard outer frame */
+    .kbd-border{background: linear-gradient(180deg,#111316,#0c0f11); padding:10px; border-radius:10px; border:3px solid var(--kbd-border); display:inline-block;}
+    #keyboard{background:var(--kbd-bg); padding:14px; border-radius:6px; display:block;}
+    .kb-row{display:flex; margin-bottom:10px;}
+    .kb-key{display:flex;flex-direction:column;justify-content:center;align-items:center;border-radius:8px;margin-right:8px;padding:6px; background:var(--key-zero); cursor:pointer; user-select:none; min-width:36px; box-shadow: 0 2px 0 rgba(0,0,0,0.4);}
+    .kb-key .label{font-weight:bold; text-align:center; white-space:pre-wrap;}
+    .kb-key .val{color:var(--val-color);font-size:12px;margin-top:6px;}
+    .kb-key.selected{background:var(--key-selected);}
+    .kb-key.highlight{background:var(--key-highlight) !important;}
+    #controls{display:flex;align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap;}
+    #selectionInfo{min-width:160px;}
+    #slider{width:420px}
+    .log{background:#0f1416;border:1px solid #222;height:220px;overflow:auto;padding:8px;border-radius:6px;color:#bcd;margin-top:12px;}
+    .status{margin-left:8px;color:#bcd;}
+    @media(max-width:900px){ #slider{width:220px} .kb-key{min-width:44px}}
+  </style>
+</head>
+<body>
+  <h1>Motor Keyboard (WebSerial)</h1>
+
+  <div class="topbar">
+    <button id="btnConnect" class="primary">Connect</button>
+    <button id="btnDisconnect" disabled>Disconnect</button>
+    <label>Baud: <input id="baud" type="text" value="115200" style="width:100px" /></label>
+    <span id="portInfo" class="status">Port: -</span>
+    <span id="status" class="status">Status: Not connected</span>
+  </div>
+
+  <!-- keyboard frame -->
+  <div class="kbd-border">
+    <div id="keyboard"></div>
+  </div>
+
+  <div id="controls">
+    <div id="selectionInfo">選択: 0 個</div>
+    <input id="slider" type="range" min="0" max="100" value="0" disabled />
+    <button id="btnClear">選択解除</button>
+    <button id="btnRun" class="primary">決定</button>
+    <button id="btnStop" class="danger" disabled>停止</button>
+  </div>
+
+  <pre class="log" id="log"></pre>
+
+<script>
+/* ===== config & layout (same as you provided) ===== */
+const ASSIGN_KEYS = ['Esc','1','2','3','4','5','Tab','Q','W','E','R','T',
+  'Caps','A','S','D','F','G','ShiftL','Z','X','C','V','CtrlL','Win','AltL','Space'];
+
+const KEYBOARD_LAYOUT = [ /* ... copy same layout as above ... */ ];
+/* For brevity in this snippet, insert the exact KEYBOARD_LAYOUT array from your provided config. */
+/* (In your repository file, keep the array exactly as required.) */
+
+const KEY_UNIT = 64, KEY_HEIGHT = 80, KEY_SPACING = 8;
+const STEPS_PER_REV = 200, MIN_STEP_DELAY = 0.002, MAX_STEP_DELAY = 0.020;
+
+/* ===== helper: assign motors by ASSIGN_KEYS (same logic as Python) ===== */
+function assign_motors_by_list(layout, assign_keys){
+  for (const r of layout) for (const k of r.keys) delete k.motor;
+  const allLabels = new Set();
+  for (const row of layout) for (const k of row.keys) allLabels.add(k.label);
+  const seen = new Set(), seq = [];
+  for (const k of assign_keys){
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (allLabels.has(k)) seq.push(k); else console.warn('ASSIGN_KEYS not in layout:', k);
+  }
+  for (let i=0;i<seq.length;i++){
+    const lbl = seq[i]; let assigned=false;
+    for (const row of layout){
+      for (const key of row.keys){
+        if (key.label === lbl){ key.motor = i; assigned=true; break; }
+      }
+      if (assigned) break;
+    }
+  }
+}
+assign_motors_by_list(KEYBOARD_LAYOUT, ASSIGN_KEYS);
+
+/* compute N_MOTORS and motorValues */
+let N_MOTORS = 0;
+for (const r of KEYBOARD_LAYOUT) for (const k of r.keys) if (k.motor!==undefined && Number.isFinite(k.motor)) N_MOTORS = Math.max(N_MOTORS, k.motor+1);
+let motorValues = new Array(N_MOTORS).fill(0);
+
+/* state & DOM refs */
+const KEYBOARD_EL = document.getElementById('keyboard');
+const logEl = document.getElementById('log'), statusEl = document.getElementById('status'), portInfoEl = document.getElementById('portInfo');
+const btnConnect = document.getElementById('btnConnect'), btnDisconnect = document.getElementById('btnDisconnect');
+const baudInput = document.getElementById('baud'), slider = document.getElementById('slider');
+const selectionInfoEl = document.getElementById('selectionInfo'), btnClear = document.getElementById('btnClear');
+const btnRun = document.getElementById('btnRun'), btnStop = document.getElementById('btnStop');
+
+let selected = new Set();
+let labelToKey = {}, labelToElement = {};
+let currentMotor = -1;
+let running = false, stopRequested = false;
+
+/* Serial port vars */
+let port = null, reader = null, writer = null, readLoopCancel = false;
+let serialListeners = [];
+const VENDOR_MAP = {
+  0x2341: 'Arduino (official)',
+  0x1A86: 'CH340 (common clone)',
+  0x0403: 'FTDI',
+  0x067B: 'Prolific (PL2303)',
+  0x10C4: 'Silicon Labs (CP210x)'
+};
+
+/* logging */
+function log(msg){ logEl.textContent += `[${(new Date()).toLocaleTimeString()}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
+
+/* UI build */
+function buildKeyboard(){
+  KEYBOARD_EL.innerHTML='';
+  labelToKey={}; labelToElement={};
+  for (const row of KEYBOARD_LAYOUT){
+    const rowDiv = document.createElement('div'); rowDiv.className='kb-row';
+    for (const key of row.keys){
+      const widthPx = Math.max(36, Math.round((key.width||1)*KEY_UNIT - KEY_SPACING));
+      const el = document.createElement('div'); el.className='kb-key';
+      el.style.width = widthPx + 'px';
+      el.style.height = KEY_HEIGHT + 'px';
+      const lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = key.label;
+      const val = document.createElement('div'); val.className='val'; val.textContent = (key.motor!==undefined? motorValues[key.motor] : '');
+      el.appendChild(lbl); el.appendChild(val);
+      el.addEventListener('click', ()=>onKeyClicked(key.label));
+      rowDiv.appendChild(el);
+      labelToKey[key.label] = key;
+      labelToElement[key.label] = {el, lbl, val};
+      updateKeyBg(key.label);
+    }
+    KEYBOARD_EL.appendChild(rowDiv);
+  }
+}
+function updateKeyBg(label){
+  const k = labelToKey[label], m = labelToElement[label];
+  if (!m) return;
+  if (!k || k.motor===undefined){ m.el.style.background = 'var(--kbd-bg)'; m.val.textContent=''; return; }
+  const mi = k.motor;
+  if (currentMotor===mi) m.el.classList.add('highlight'); else m.el.classList.remove('highlight');
+  if (selected.has(mi)) m.el.classList.add('selected'); else m.el.classList.remove('selected');
+  m.val.textContent = String(motorValues[mi] || 0);
+}
+
+/* Selection handlers */
+function onKeyClicked(label){
+  const key = labelToKey[label];
+  if (!key || key.motor===undefined){ log('キーはモーター割当なし: '+label); return; }
+  if (running){ log('動作中は選択変更不可'); return; }
+  const mi = key.motor;
+  if (selected.has(mi)) selected.delete(mi); else selected.add(mi);
+  updateSliderState(); updateKeyBg(label);
+  log('選択数: '+selected.size);
+}
+function clearSelection(){ selected.clear(); updateSliderState(); for (const l in labelToElement) updateKeyBg(l);}
+btnClear.addEventListener('click', clearSelection);
+function updateSliderState(){
+  if (selected.size===0){ selectionInfoEl.textContent='選択: 0 個'; slider.disabled=true; slider.value=0; }
+  else { const vals = Array.from(selected).map(i=>motorValues[i]); const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length); selectionInfoEl.textContent=`選択: ${selected.size} 個 (平均: ${avg})`; slider.disabled=false; slider.value=avg; }
+}
+slider.addEventListener('input', e=>{ const v = Number(e.target.value); for (const mi of selected){ motorValues[mi]=v; for (const lbl in labelToKey){ if (labelToKey[lbl].motor===mi) labelToElement[lbl].val.textContent = String(v); } } updateSliderState(); });
+
+/* Serial helpers (Web Serial API) */
+function addSerialListener(matcher, timeoutMs=10000){
+  return new Promise((resolve,reject)=>{
+    const obj = {matcher, resolve, reject};
+    if (timeoutMs>0) obj.timer = setTimeout(()=>{ const idx = serialListeners.indexOf(obj); if (idx>=0) serialListeners.splice(idx,1); reject(new Error('timeout')); }, timeoutMs);
+    serialListeners.push(obj);
+  });
+}
+function notifySerialLine(line){
+  for (let i=serialListeners.length-1;i>=0;--i){
+    const o = serialListeners[i];
+    try{ if (o.matcher(line)){ if (o.timer) clearTimeout(o.timer); o.resolve(line); serialListeners.splice(i,1);} }catch(e){}
+  }
+}
+
+/* read loop */
+async function startReadLoop(){
+  if (!port) return;
+  const textDecoder = new TextDecoderStream();
+  port.readable.pipeTo(textDecoder.writable);
+  reader = textDecoder.readable.getReader();
+  let buf = '';
+  try{
+    while (true){
+      const {value, done} = await reader.read();
+      if (done) break;
+      if (value){
+        buf += value;
+        let idx;
+        while ((idx = buf.indexOf('\n'))>=0){
+          const line = buf.slice(0, idx+1).trim(); buf = buf.slice(idx+1);
+          if (line.length>0){ log('[RX] '+line); notifySerialLine(line); }
+        }
+      }
+    }
+  }catch(e){
+    log('read loop error: '+e);
+  }finally{
+    if (reader){ try{ await reader.cancel(); }catch(e){} reader=null; }
+    log('read loop finished');
+  }
+}
+
+/* write */
+async function writeSerial(txt){
+  if (!port) throw new Error('port not open');
+  const encoder = new TextEncoder();
+  const w = port.writable.getWriter();
+  await w.write(encoder.encode(txt + '\n'));
+  w.releaseLock();
+  log('[TX] '+txt);
+}
+
+/* friendly name from vendor/product id (best-effort) */
+function friendlyFromInfo(info){
+  if (!info) return 'USB Serial';
+  const vid = info.usbVendorId, pid = info.usbProductId;
+  if (!vid) return 'USB Serial';
+  const vendor = VENDOR_MAP[vid] || ('VID:0x'+vid.toString(16));
+  const prod = pid ? (' PID:0x'+pid.toString(16)) : '';
+  return vendor + prod;
+}
+
+/* Connect/Disconnect flows */
+btnConnect.addEventListener('click', async ()=>{
+  if (!('serial' in navigator)){ alert('Web Serial API not available. Use Chrome/Edge.'); return; }
+  try{
+    port = await navigator.serial.requestPort(); // user chooses device
+    const baud = parseInt(baudInput.value || '115200', 10);
+    await port.open({ baudRate: baud });
+    statusEl.textContent = 'Connected';
+    // show friendly device info if available
+    let info = null;
+    try{ info = port.getInfo(); }catch(e){}
+    portInfoEl.textContent = 'Port: ' + friendlyFromInfo(info);
+    btnConnect.disabled=true; btnDisconnect.disabled=false;
+    // start read loop
+    startReadLoop();
+    // send HELLO -> wait for READY (optional)
+    try{
+      await writeSerial('HELLO');
+      await addSerialListener(l=>l.trim().toUpperCase().startsWith('READY'), 3000);
+      log('Arduino READY');
+      statusEl.textContent = 'Arduino READY';
+    }catch(e){ log('READY not received (timeout)'); }
+  }catch(err){
+    log('Connect error: '+err);
+    statusEl.textContent = 'Not connected';
+    if (port){ try{ await port.close(); }catch(e){} port=null; }
+  }
+});
+
+btnDisconnect.addEventListener('click', async ()=>{
+  try{
+    if (reader) { try{ await reader.cancel(); }catch(e){} reader=null; }
+    if (port && port.readable) { try{ await port.readable.cancel(); }catch(e){} }
+    if (port && port.writable){ try{ const w = port.writable.getWriter(); await w.close(); }catch(e){} }
+    if (port){ await port.close(); port=null; }
+    statusEl.textContent = 'Disconnected';
+    portInfoEl.textContent = 'Port: -';
+    btnConnect.disabled=false; btnDisconnect.disabled=true;
+    log('Disconnected');
+  }catch(e){ log('Disconnect err: '+e); }
+});
+
+/* Run/Stop sequence (sequential like original) */
+btnRun.addEventListener('click', async ()=>{
+  if (!port) { alert('Not connected'); return; }
+  if (running) { log('Already running'); return; }
+  running = true; stopRequested=false;
+  btnStop.disabled=false; btnRun.disabled=true;
+  btnConnect.disabled=true; btnDisconnect.disabled=true;
+  try{
+    for (let idx=0; idx<N_MOTORS; idx++){
+      if (stopRequested){ log('Stop requested'); break; }
+      const val = motorValues[idx] || 0;
+      const steps = Math.floor(STEPS_PER_REV * val / 100);
+      if (steps<=0){ log(`Motor ${idx+1} skip`); continue; }
+      const delay_s = MIN_STEP_DELAY + (1 - val/100.0) * (MAX_STEP_DELAY - MIN_STEP_DELAY);
+      const delay_ms = Math.max(1, Math.round(delay_s*1000));
+      currentMotor = idx; updateAllKeyBgs();
+      await writeSerial(`RUN ${idx} ${steps} ${delay_ms}`);
+      // wait for DONE idx or STOPPED idx or ERROR
+      try{
+        const line = await addSerialListener(l=>{
+          const p = l.trim().split(/\s+/); if (!p.length) return false;
+          const k = p[0].toUpperCase();
+          if ((k==='DONE' || k==='STOPPED') && p.length>=2) return Number(p[1])===idx;
+          if (k==='ERROR') return true; return false;
+        }, Math.max(5000, steps*delay_ms + 5000));
+        log('[Ard] '+line);
+        const parts = line.trim().split(/\s+/);
+        const k = parts[0].toUpperCase();
+        if (k==='STOPPED'){ log(`Motor ${idx+1} stopped`); break; }
+        if (k==='ERROR'){ log(`Motor ${idx+1} error: ${line}`); break; }
+      }catch(e){
+        log('Wait DONE timeout: '+e);
+        break;
+      }finally{
+        currentMotor=-1; updateAllKeyBgs();
+      }
+    }
+    log('Run finished');
+  }catch(e){ log('Run error: '+e); }
+  running=false; btnStop.disabled=true; btnRun.disabled=false; btnConnect.disabled=true; btnDisconnect.disabled=false;
+});
+
+btnStop.addEventListener('click', async ()=>{
+  stopRequested=true;
+  if (!port){ log('No port'); return; }
+  try{ await writeSerial('STOP'); log('STOP sent'); }catch(e){ log('STOP send err: '+e); }
+});
+
+/* init UI */
+buildKeyboard(); updateSliderState();
+log('Ready. Use Connect (Chrome/Edge).');
+
+/* helper to update all keys */
+function updateAllKeyBgs(){ for (const lbl in labelToElement) updateKeyBg(lbl); }
+
+/* Note: Web Serial API requires secure context (HTTPS) except on localhost */
+if (!('serial' in navigator)) { log('Web Serial API not available. Use Chrome/Edge.'); alert('Web Serial API not available. Use Chrome/Edge.'); }
+</script>
+</body>
+</html>
