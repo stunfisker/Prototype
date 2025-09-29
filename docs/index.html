@@ -19,7 +19,6 @@
     button.primary{background:#16a085;}
     button.danger{background:#c0392b;}
     button:disabled{opacity:0.5;cursor:not-allowed;}
-    /* keyboard outer frame */
     .kbd-border{background: linear-gradient(180deg,#111316,#0c0f11); padding:10px; border-radius:10px; border:3px solid var(--kbd-border); display:inline-block;}
     #keyboard{background:var(--kbd-bg); padding:14px; border-radius:6px; display:block;}
     .kb-row{display:flex; margin-bottom:10px;}
@@ -63,46 +62,105 @@
   <pre class="log" id="log"></pre>
 
 <script>
-/* ===== config & layout (same as you provided) ===== */
+/* ===== config & layout ===== */
 const ASSIGN_KEYS = ['Esc','1','2','3','4','5','Tab','Q','W','E','R','T',
   'Caps','A','S','D','F','G','ShiftL','Z','X','C','V','CtrlL','Win','AltL','Space'];
 
-const KEYBOARD_LAYOUT = [ /* ... copy same layout as above ... */ ];
-/* For brevity in this snippet, insert the exact KEYBOARD_LAYOUT array from your provided config. */
-/* (In your repository file, keep the array exactly as required.) */
+const KEYBOARD_LAYOUT = [
+    {
+        keys: [
+            {'label': 'Esc', 'width': 1},
+            {'label': '1', 'width': 1},
+            {'label': '2', 'width': 1},
+            {'label': '3', 'width': 1},
+            {'label': '4', 'width': 1},
+            {'label': '5', 'width': 1},
+            {'label': '6', 'width': 1},
+            {'label': '7', 'width': 1},
+            {'label': '8', 'width': 1},
+            {'label': '9', 'width': 1},
+            {'label': '0', 'width': 1},
+            {'label': '-', 'width': 1},
+            {'label': '=', 'width': 1},
+            {'label': 'Backspace', 'width': 2},
+        ]
+    },
+    {
+        keys: [
+            {'label': 'Tab', 'width': 1.5},
+            {'label': 'Q', 'width': 1},
+            {'label': 'W', 'width': 1},
+            {'label': 'E', 'width': 1},
+            {'label': 'R', 'width': 1},
+            {'label': 'T', 'width': 1},
+            {'label': 'Y', 'width': 1},
+            {'label': 'U', 'width': 1},
+            {'label': 'I', 'width': 1},
+            {'label': 'O', 'width': 1},
+            {'label': 'P', 'width': 1},
+            {'label': '[', 'width': 1},
+            {'label': ']', 'width': 1},
+            {'label': '\\\\', 'width': 1.5}
+        ]
+    },
+    {
+        keys: [
+            {'label': 'Caps', 'width': 1.75},
+            {'label': 'A', 'width': 1},
+            {'label': 'S', 'width': 1},
+            {'label': 'D', 'width': 1},
+            {'label': 'F', 'width': 1},
+            {'label': 'G', 'width': 1},
+            {'label': 'H', 'width': 1},
+            {'label': 'J', 'width': 1},
+            {'label': 'K', 'width': 1},
+            {'label': 'L', 'width': 1},
+            {'label': ';', 'width': 1},
+            {'label': '\'', 'width': 1},
+            {'label': 'Enter', 'width': 2.25}
+        ]
+    },
+    {
+        keys: [
+            {'label': 'ShiftL', 'width': 2.25},
+            {'label': 'Z', 'width': 1},
+            {'label': 'X', 'width': 1},
+            {'label': 'C', 'width': 1},
+            {'label': 'V', 'width': 1},
+            {'label': 'B', 'width': 1},
+            {'label': 'N', 'width': 1},
+            {'label': 'M', 'width': 1},
+            {'label': ',', 'width': 1},
+            {'label': '.', 'width': 1},
+            {'label': '/', 'width': 1},
+            {'label': 'ShiftR', 'width': 2.75}
+        ]
+    },
+    {
+        keys: [
+            {'label': 'CtrlL', 'width': 1.25},
+            {'label': 'Win', 'width': 1.25},
+            {'label': 'AltL', 'width': 1.25},
+            {'label': 'Space', 'width': 6.25},
+            {'label': 'AltR', 'width': 1.25},
+            {'label': 'Menu', 'width': 1.25},
+            {'label': 'CtrlR', 'width': 1.25}
+        ]
+    }
+];
 
 const KEY_UNIT = 64, KEY_HEIGHT = 80, KEY_SPACING = 8;
 const STEPS_PER_REV = 200, MIN_STEP_DELAY = 0.002, MAX_STEP_DELAY = 0.020;
 
-/* ===== helper: assign motors by ASSIGN_KEYS (same logic as Python) ===== */
-function assign_motors_by_list(layout, assign_keys){
-  for (const r of layout) for (const k of r.keys) delete k.motor;
-  const allLabels = new Set();
-  for (const row of layout) for (const k of row.keys) allLabels.add(k.label);
-  const seen = new Set(), seq = [];
-  for (const k of assign_keys){
-    if (seen.has(k)) continue;
-    seen.add(k);
-    if (allLabels.has(k)) seq.push(k); else console.warn('ASSIGN_KEYS not in layout:', k);
-  }
-  for (let i=0;i<seq.length;i++){
-    const lbl = seq[i]; let assigned=false;
-    for (const row of layout){
-      for (const key of row.keys){
-        if (key.label === lbl){ key.motor = i; assigned=true; break; }
-      }
-      if (assigned) break;
-    }
-  }
-}
-assign_motors_by_list(KEYBOARD_LAYOUT, ASSIGN_KEYS);
-
-/* compute N_MOTORS and motorValues */
+/* ===== state & refs ===== */
 let N_MOTORS = 0;
-for (const r of KEYBOARD_LAYOUT) for (const k of r.keys) if (k.motor!==undefined && Number.isFinite(k.motor)) N_MOTORS = Math.max(N_MOTORS, k.motor+1);
+for (const row of KEYBOARD_LAYOUT) for (const k of row.keys) if (k.motor!==undefined) N_MOTORS = Math.max(N_MOTORS, k.motor+1);
+assign_motors_by_list(KEYBOARD_LAYOUT, ASSIGN_KEYS); // ensure assignment even if not pre-assigned
+N_MOTORS = 0;
+for (const row of KEYBOARD_LAYOUT) for (const k of row.keys) if (k.motor!==undefined) N_MOTORS = Math.max(N_MOTORS, k.motor+1);
+
 let motorValues = new Array(N_MOTORS).fill(0);
 
-/* state & DOM refs */
 const KEYBOARD_EL = document.getElementById('keyboard');
 const logEl = document.getElementById('log'), statusEl = document.getElementById('status'), portInfoEl = document.getElementById('portInfo');
 const btnConnect = document.getElementById('btnConnect'), btnDisconnect = document.getElementById('btnDisconnect');
@@ -115,31 +173,47 @@ let labelToKey = {}, labelToElement = {};
 let currentMotor = -1;
 let running = false, stopRequested = false;
 
-/* Serial port vars */
-let port = null, reader = null, writer = null, readLoopCancel = false;
-let serialListeners = [];
+/* vendor map for friendly name */
 const VENDOR_MAP = {
   0x2341: 'Arduino (official)',
-  0x1A86: 'CH340 (common clone)',
+  0x1A86: 'CH340 (clone)',
   0x0403: 'FTDI',
   0x067B: 'Prolific (PL2303)',
   0x10C4: 'Silicon Labs (CP210x)'
 };
 
-/* logging */
+/* ===== functions ===== */
 function log(msg){ logEl.textContent += `[${(new Date()).toLocaleTimeString()}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
 
-/* UI build */
+function assign_motors_by_list(layout, assign_keys){
+  for (const r of layout) for (const k of r.keys) delete k.motor;
+  const allLabels = new Set();
+  for (const row of layout) for (const k of row.keys) allLabels.add(k.label);
+  const seen = new Set(), seq = [];
+  for (const k of assign_keys){
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (allLabels.has(k)) seq.push(k);
+  }
+  for (let i=0;i<seq.length;i++){
+    const lbl = seq[i];
+    let assigned=false;
+    for (const row of layout){
+      for (const key of row.keys){
+        if (key.label === lbl){ key.motor = i; assigned=true; break; }
+      }
+      if (assigned) break;
+    }
+  }
+}
+
 function buildKeyboard(){
-  KEYBOARD_EL.innerHTML='';
-  labelToKey={}; labelToElement={};
+  KEYBOARD_EL.innerHTML=''; labelToKey={}; labelToElement={};
   for (const row of KEYBOARD_LAYOUT){
     const rowDiv = document.createElement('div'); rowDiv.className='kb-row';
     for (const key of row.keys){
       const widthPx = Math.max(36, Math.round((key.width||1)*KEY_UNIT - KEY_SPACING));
-      const el = document.createElement('div'); el.className='kb-key';
-      el.style.width = widthPx + 'px';
-      el.style.height = KEY_HEIGHT + 'px';
+      const el = document.createElement('div'); el.className='kb-key'; el.style.width = widthPx + 'px'; el.style.height = KEY_HEIGHT + 'px';
       const lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = key.label;
       const val = document.createElement('div'); val.className='val'; val.textContent = (key.motor!==undefined? motorValues[key.motor] : '');
       el.appendChild(lbl); el.appendChild(val);
@@ -152,6 +226,7 @@ function buildKeyboard(){
     KEYBOARD_EL.appendChild(rowDiv);
   }
 }
+
 function updateKeyBg(label){
   const k = labelToKey[label], m = labelToElement[label];
   if (!m) return;
@@ -162,25 +237,28 @@ function updateKeyBg(label){
   m.val.textContent = String(motorValues[mi] || 0);
 }
 
-/* Selection handlers */
 function onKeyClicked(label){
   const key = labelToKey[label];
-  if (!key || key.motor===undefined){ log('キーはモーター割当なし: '+label); return; }
+  if (!key || key.motor===undefined){ log('キーはモータ割当なし: '+label); return; }
   if (running){ log('動作中は選択変更不可'); return; }
   const mi = key.motor;
   if (selected.has(mi)) selected.delete(mi); else selected.add(mi);
   updateSliderState(); updateKeyBg(label);
   log('選択数: '+selected.size);
 }
-function clearSelection(){ selected.clear(); updateSliderState(); for (const l in labelToElement) updateKeyBg(l);}
+
+function clearSelection(){ selected.clear(); updateSliderState(); for (const l in labelToElement) updateKeyBg(l); }
 btnClear.addEventListener('click', clearSelection);
+
 function updateSliderState(){
   if (selected.size===0){ selectionInfoEl.textContent='選択: 0 個'; slider.disabled=true; slider.value=0; }
   else { const vals = Array.from(selected).map(i=>motorValues[i]); const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length); selectionInfoEl.textContent=`選択: ${selected.size} 個 (平均: ${avg})`; slider.disabled=false; slider.value=avg; }
 }
-slider.addEventListener('input', e=>{ const v = Number(e.target.value); for (const mi of selected){ motorValues[mi]=v; for (const lbl in labelToKey){ if (labelToKey[lbl].motor===mi) labelToElement[lbl].val.textContent = String(v); } } updateSliderState(); });
+slider.addEventListener('input', e=>{ const v = Number(e.target.value); for (const mi of selected){ motorValues[mi]=v; for (const lbl in labelToKey) if (labelToKey[lbl].motor===mi) labelToElement[lbl].val.textContent = String(v); } updateSliderState(); });
 
-/* Serial helpers (Web Serial API) */
+/* ===== Web Serial helpers ===== */
+let port = null, reader = null;
+let serialListeners = [];
 function addSerialListener(matcher, timeoutMs=10000){
   return new Promise((resolve,reject)=>{
     const obj = {matcher, resolve, reject};
@@ -194,8 +272,6 @@ function notifySerialLine(line){
     try{ if (o.matcher(line)){ if (o.timer) clearTimeout(o.timer); o.resolve(line); serialListeners.splice(i,1);} }catch(e){}
   }
 }
-
-/* read loop */
 async function startReadLoop(){
   if (!port) return;
   const textDecoder = new TextDecoderStream();
@@ -209,21 +285,11 @@ async function startReadLoop(){
       if (value){
         buf += value;
         let idx;
-        while ((idx = buf.indexOf('\n'))>=0){
-          const line = buf.slice(0, idx+1).trim(); buf = buf.slice(idx+1);
-          if (line.length>0){ log('[RX] '+line); notifySerialLine(line); }
-        }
+        while ((idx = buf.indexOf('\n'))>=0){ const line = buf.slice(0, idx+1).trim(); buf = buf.slice(idx+1); if (line.length>0){ log('[RX] '+line); notifySerialLine(line); } }
       }
     }
-  }catch(e){
-    log('read loop error: '+e);
-  }finally{
-    if (reader){ try{ await reader.cancel(); }catch(e){} reader=null; }
-    log('read loop finished');
-  }
+  }catch(e){ log('read loop error: '+e); }finally{ if (reader){ try{ await reader.cancel(); }catch(e){} reader=null; } log('read loop finished'); }
 }
-
-/* write */
 async function writeSerial(txt){
   if (!port) throw new Error('port not open');
   const encoder = new TextEncoder();
@@ -233,7 +299,7 @@ async function writeSerial(txt){
   log('[TX] '+txt);
 }
 
-/* friendly name from vendor/product id (best-effort) */
+/* friendly port info */
 function friendlyFromInfo(info){
   if (!info) return 'USB Serial';
   const vid = info.usbVendorId, pid = info.usbProductId;
@@ -243,55 +309,39 @@ function friendlyFromInfo(info){
   return vendor + prod;
 }
 
-/* Connect/Disconnect flows */
+/* Connect/Disconnect */
 btnConnect.addEventListener('click', async ()=>{
-  if (!('serial' in navigator)){ alert('Web Serial API not available. Use Chrome/Edge.'); return; }
+  if (!('serial' in navigator)){ alert('Web Serial API is not available in this browser. Use Chrome/Edge.'); return; }
   try{
-    port = await navigator.serial.requestPort(); // user chooses device
+    port = await navigator.serial.requestPort();
     const baud = parseInt(baudInput.value || '115200', 10);
     await port.open({ baudRate: baud });
     statusEl.textContent = 'Connected';
-    // show friendly device info if available
     let info = null;
     try{ info = port.getInfo(); }catch(e){}
     portInfoEl.textContent = 'Port: ' + friendlyFromInfo(info);
     btnConnect.disabled=true; btnDisconnect.disabled=false;
-    // start read loop
     startReadLoop();
-    // send HELLO -> wait for READY (optional)
-    try{
-      await writeSerial('HELLO');
-      await addSerialListener(l=>l.trim().toUpperCase().startsWith('READY'), 3000);
-      log('Arduino READY');
-      statusEl.textContent = 'Arduino READY';
-    }catch(e){ log('READY not received (timeout)'); }
-  }catch(err){
-    log('Connect error: '+err);
-    statusEl.textContent = 'Not connected';
-    if (port){ try{ await port.close(); }catch(e){} port=null; }
-  }
+    try{ await writeSerial('HELLO'); await addSerialListener(l=>l.trim().toUpperCase().startsWith('READY'), 3000); log('Arduino READY'); statusEl.textContent = 'Arduino READY'; }catch(e){ log('READY not received (timeout)'); }
+  }catch(err){ log('Connect error: '+err); statusEl.textContent = 'Not connected'; if (port){ try{ await port.close(); }catch(e){} port=null; } }
 });
 
 btnDisconnect.addEventListener('click', async ()=>{
   try{
-    if (reader) { try{ await reader.cancel(); }catch(e){} reader=null; }
-    if (port && port.readable) { try{ await port.readable.cancel(); }catch(e){} }
+    if (reader){ try{ await reader.cancel(); }catch(e){} reader=null; }
+    if (port && port.readable){ try{ await port.readable.cancel(); }catch(e){} }
     if (port && port.writable){ try{ const w = port.writable.getWriter(); await w.close(); }catch(e){} }
     if (port){ await port.close(); port=null; }
-    statusEl.textContent = 'Disconnected';
-    portInfoEl.textContent = 'Port: -';
-    btnConnect.disabled=false; btnDisconnect.disabled=true;
-    log('Disconnected');
+    statusEl.textContent = 'Disconnected'; portInfoEl.textContent='Port: -'; btnConnect.disabled=false; btnDisconnect.disabled=true; log('Disconnected');
   }catch(e){ log('Disconnect err: '+e); }
 });
 
-/* Run/Stop sequence (sequential like original) */
+/* Run sequence */
 btnRun.addEventListener('click', async ()=>{
   if (!port) { alert('Not connected'); return; }
   if (running) { log('Already running'); return; }
   running = true; stopRequested=false;
-  btnStop.disabled=false; btnRun.disabled=true;
-  btnConnect.disabled=true; btnDisconnect.disabled=true;
+  btnStop.disabled=false; btnRun.disabled=true; btnConnect.disabled=true; btnDisconnect.disabled=true;
   try{
     for (let idx=0; idx<N_MOTORS; idx++){
       if (stopRequested){ log('Stop requested'); break; }
@@ -300,9 +350,8 @@ btnRun.addEventListener('click', async ()=>{
       if (steps<=0){ log(`Motor ${idx+1} skip`); continue; }
       const delay_s = MIN_STEP_DELAY + (1 - val/100.0) * (MAX_STEP_DELAY - MIN_STEP_DELAY);
       const delay_ms = Math.max(1, Math.round(delay_s*1000));
-      currentMotor = idx; updateAllKeyBgs();
+      currentMotor = idx; for (const lbl in labelToElement) updateKeyBg(lbl);
       await writeSerial(`RUN ${idx} ${steps} ${delay_ms}`);
-      // wait for DONE idx or STOPPED idx or ERROR
       try{
         const line = await addSerialListener(l=>{
           const p = l.trim().split(/\s+/); if (!p.length) return false;
@@ -311,37 +360,22 @@ btnRun.addEventListener('click', async ()=>{
           if (k==='ERROR') return true; return false;
         }, Math.max(5000, steps*delay_ms + 5000));
         log('[Ard] '+line);
-        const parts = line.trim().split(/\s+/);
-        const k = parts[0].toUpperCase();
+        const parts = line.trim().split(/\s+/); const k = parts[0].toUpperCase();
         if (k==='STOPPED'){ log(`Motor ${idx+1} stopped`); break; }
         if (k==='ERROR'){ log(`Motor ${idx+1} error: ${line}`); break; }
-      }catch(e){
-        log('Wait DONE timeout: '+e);
-        break;
-      }finally{
-        currentMotor=-1; updateAllKeyBgs();
-      }
+      }catch(e){ log('Wait DONE timeout: '+e); break; }finally{ currentMotor=-1; for (const lbl in labelToElement) updateKeyBg(lbl); }
     }
     log('Run finished');
   }catch(e){ log('Run error: '+e); }
   running=false; btnStop.disabled=true; btnRun.disabled=false; btnConnect.disabled=true; btnDisconnect.disabled=false;
 });
 
-btnStop.addEventListener('click', async ()=>{
-  stopRequested=true;
-  if (!port){ log('No port'); return; }
-  try{ await writeSerial('STOP'); log('STOP sent'); }catch(e){ log('STOP send err: '+e); }
-});
+btnStop.addEventListener('click', async ()=>{ stopRequested=true; if (!port){ log('No port'); return; } try{ await writeSerial('STOP'); log('STOP sent'); }catch(e){ log('STOP send err: '+e); } });
 
-/* init UI */
+/* init */
 buildKeyboard(); updateSliderState();
 log('Ready. Use Connect (Chrome/Edge).');
-
-/* helper to update all keys */
-function updateAllKeyBgs(){ for (const lbl in labelToElement) updateKeyBg(lbl); }
-
-/* Note: Web Serial API requires secure context (HTTPS) except on localhost */
-if (!('serial' in navigator)) { log('Web Serial API not available. Use Chrome/Edge.'); alert('Web Serial API not available. Use Chrome/Edge.'); }
+if (!('serial' in navigator)) { log('Web Serial API not available. Use Chrome/Edge.'); alert('Web Serial API not available in this browser.'); }
 </script>
 </body>
 </html>
