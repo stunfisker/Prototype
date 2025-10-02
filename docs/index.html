@@ -100,7 +100,7 @@ const KEYBOARD_LAYOUT = [
             {'label': 'P', 'width': 1},
             {'label': '[', 'width': 1},
             {'label': ']', 'width': 1},
-            {'label': '\\\\', 'width': 1.5}
+            {'label': '\\', 'width': 1.5}
         ]
     },
     {
@@ -144,6 +144,7 @@ const KEYBOARD_LAYOUT = [
             {'label': 'Space', 'width': 6.25},
             {'label': 'AltR', 'width': 1.25},
             {'label': 'Menu', 'width': 1.25},
+            {'label': 'Fn', 'width': 1.25},
             {'label': 'CtrlR', 'width': 1.25}
         ]
     }
@@ -239,17 +240,38 @@ function onKeyClicked(label){
   const key = labelToKey[label];
   if (!key || key.device===undefined){ log('キーはデバイス割当なし: '+label); return; }
   if (running){ log('動作中は選択変更不可'); return; }
+
   const di = key.device;
   if (selected.has(di)) selected.delete(di); else selected.add(di);
-  updateSliderState(); updateKeyBg(label);
-  log('選択数: '+selected.size);
+
+  updateSliderState();
+
+  // 同じデバイスに割り当てられている全ラベルの背景を更新
+  for (const l in labelToElement){
+    if (labelToKey[l] && labelToKey[l].device === di) updateKeyBg(l);
+  }
+
+  // 選択中のデバイス番号 -> ラベル に変換してログ出力
+  const deviceToLabel = {};
+  for (const l in labelToKey){
+    const k = labelToKey[l];
+    if (k && k.device !== undefined) deviceToLabel[k.device] = l;
+  }
+  const selNames = Array.from(selected).map(i => deviceToLabel[i] || `#${i}`);
+  log(selNames.length ? `選択: ${selNames.join('、')}` : '選択: 選択なし');
 }
-function clearSelection(){ selected.clear(); updateSliderState(); for (const l in labelToElement) updateKeyBg(l); }
+
+function clearSelection(){
+  selected.clear();
+  updateSliderState();
+  for (const l in labelToElement) updateKeyBg(l);
+  log('選択: 選択なし');
+}
 btnClear.addEventListener('click', clearSelection);
 
 function updateSliderState(){
   if (selected.size===0){ selectionInfoEl.textContent='選択: 0 個'; slider.disabled=true; slider.value=0; }
-  else{ const vals = Array.from(selected).map(i=>deviceValues[i]); const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length); selectionInfoEl.textContent=`選択: ${selected.size} 個 (平均: ${avg})`; slider.disabled=false; slider.value=avg; }
+  else{ const vals = Array.from(selected).map(i=>deviceValues[i]); const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length); selectionInfoEl.textContent=`${avg}`; slider.disabled=false; slider.value=avg; }
 }
 slider.addEventListener('input', e=>{ const v = Number(e.target.value); for (const di of selected){ deviceValues[di]=v; for (const lbl in labelToKey) if (labelToKey[lbl].device===di) labelToElement[lbl].val.textContent = String(v); } updateSliderState(); });
 
