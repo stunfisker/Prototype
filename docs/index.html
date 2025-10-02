@@ -52,7 +52,7 @@
   </div>
 
   <div id="controls">
-    <div id="selectionInfo">選択: 0 個</div>
+    <div id="selectionInfo"></div>
     <input id="slider" type="range" min="0" max="100" value="0" disabled />
     <button id="btnClear">選択解除</button>
     <button id="btnRun" class="primary">決定</button>
@@ -258,7 +258,7 @@ function onKeyClicked(label){
     if (k && k.device !== undefined) deviceToLabel[k.device] = l;
   }
   const selNames = Array.from(selected).map(i => deviceToLabel[i] || `#${i}`);
-  log(selNames.length ? `選択: ${selNames.join('、')}` : '選択: 選択なし');
+  log(selNames.length ? `選択: ${selNames.join(',')}` : '選択: 選択なし');
 }
 
 function clearSelection(){
@@ -270,7 +270,7 @@ function clearSelection(){
 btnClear.addEventListener('click', clearSelection);
 
 function updateSliderState(){
-  if (selected.size===0){ selectionInfoEl.textContent='選択: 0 個'; slider.disabled=true; slider.value=0; }
+  if (selected.size===0){ selectionInfoEl.textContent=''; slider.disabled=true; slider.value=0; }
   else{ const vals = Array.from(selected).map(i=>deviceValues[i]); const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length); selectionInfoEl.textContent=`${avg}`; slider.disabled=false; slider.value=avg; }
 }
 slider.addEventListener('input', e=>{ const v = Number(e.target.value); for (const di of selected){ deviceValues[di]=v; for (const lbl in labelToKey) if (labelToKey[lbl].device===di) labelToElement[lbl].val.textContent = String(v); } updateSliderState(); });
@@ -400,3 +400,4 @@ if (!('serial' in navigator)) { log('Web Serial API not available. Use Chrome/Ed
 </script>
 </body>
 </html>
+
