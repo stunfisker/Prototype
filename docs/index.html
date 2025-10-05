@@ -22,7 +22,7 @@
     .kbd-border{background: linear-gradient(180deg,#111316,#0c0f11); padding:10px; border-radius:10px; border:3px solid var(--kbd-border); display:inline-block;}
     #keyboard{background:var(--kbd-bg); padding:14px; border-radius:6px; display:block;}
     .kb-row{display:flex; margin-bottom:10px;}
-    .kb-key{display:flex;flex-direction:column;justify-content:center;align-items:center;border-radius:8px;margin-right:8px;padding:6px; background:var(--key-zero); cursor:pointer; user-select:none; min-width:36px; box-shadow: 0 2px 0 rgba(0,0,0,0.4);}
+    .kb-key{display:flex;flex-direction:column;justify-content:center;align-items:center;border-radius:8px;margin-right:8px;padding:6px; background:var(--key-zero); cursor:pointer; user-select:none; min-width:36px; box-shadow: 0 2px 0 rgba(0,0,0,0.4); box-sizing: border-box;}
     .kb-key .label{font-weight:bold; text-align:center; white-space:pre-wrap;}
     .kb-key .val{color:var(--val-color);font-size:12px;margin-top:6px;}
     .kb-key.selected{background:var(--key-selected);}
@@ -210,18 +210,32 @@ function buildKeyboard(){
   KEYBOARD_EL.innerHTML=''; labelToKey={}; labelToElement={};
   for (const row of KEYBOARD_LAYOUT){
     const rowDiv = document.createElement('div'); rowDiv.className='kb-row';
-    for (const key of row.keys){
-      const widthPx = Math.max(36, Math.round((key.width||1)*KEY_UNIT - KEY_SPACING));
-      const el = document.createElement('div'); el.className='kb-key'; el.style.width = widthPx + 'px'; el.style.height = KEY_HEIGHT + 'px';
+
+    row.keys.forEach((key, idx)=>{
+      // 1) 小数px維持（roundしない）
+      const widthPx = (key.width || 1) * KEY_UNIT - KEY_SPACING;
+
+      const el = document.createElement('div');
+      el.className = 'kb-key';
+      el.style.width = widthPx + 'px';
+      el.style.height = KEY_HEIGHT + 'px';
+
+      // 2) 行末だけ margin-right を 0 に
+      el.style.marginRight = (idx === row.keys.length - 1) ? '0px' : KEY_SPACING + 'px';
+
       const lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = key.label;
-      const val = document.createElement('div'); val.className='val'; val.textContent = (key.device!==undefined? deviceValues[key.device] : '');
+      const val = document.createElement('div'); val.className='val';
+      val.textContent = (key.device!==undefined ? deviceValues[key.device] : '');
+
       el.appendChild(lbl); el.appendChild(val);
       el.addEventListener('click', ()=>onKeyClicked(key.label));
       rowDiv.appendChild(el);
+
       labelToKey[key.label] = key;
       labelToElement[key.label] = {el, lbl, val};
       updateKeyBg(key.label);
-    }
+    });
+
     KEYBOARD_EL.appendChild(rowDiv);
   }
 }
